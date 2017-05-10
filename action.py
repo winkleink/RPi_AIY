@@ -25,6 +25,9 @@ import urllib.request
 
 import actionbase
 
+gpio.setmode(gpio.BCM)
+gpio.setup(23, gpio.IN)
+
 
 # =============================================================================
 #
@@ -294,9 +297,6 @@ class Radio(object):
         
             p = subprocess.Popen(["/usr/bin/cvlc",command],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
 
-            gpio.setmode(gpio.BCM)
-            gpio.setup(23, gpio.IN)
-            
             while gpio.input(23):
                 time.sleep(1)
 
@@ -373,40 +373,17 @@ class Podcast(object):
         
             if startmp3 > 0:
                 command = "http://"+text[startmp3:endmp3]
-                
 
-                
- 
-        # this will never be used just leaving for now as it's the correct format for reference
-        elif ("absolute 80s" in voice_command) :
-
-            command = "http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a8bb"
-		
         if command != "1":
         
             p = subprocess.Popen(["/usr/bin/cvlc",command],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
 
-            gpio.setmode(gpio.BCM)
-            gpio.setup(23, gpio.IN)
-            
             while gpio.input(23):
                 time.sleep(1)
 
             pkill = subprocess.Popen(["/usr/bin/pkill","vlc"],stdin=subprocess.PIPE)
             p.kill()
 
-
-
-
-
-
-            
-            
-            
-            
-            
-            
-            
 
 class play(object):
 
@@ -422,9 +399,6 @@ class play(object):
 
         p.stdin.write(bytes('/' + track + '\n1\n', 'utf-8'))
         p.stdin.flush()
-
-        gpio.setmode(gpio.BCM)
-        gpio.setup(23, gpio.IN)
 
         while gpio.input(23):
              time.sleep(1)
