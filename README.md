@@ -22,4 +22,20 @@ sudo apt update
 sudo apt upgrade
 sudo apt install vlc
 
+Radio Stations supported are:
+Absolute Radio
+Absolute 80s
+Absolute 90s
+Absolute 00s
+Eagle Radio
+BBC Radio 1
+BBC Radio 2
+BBC Radio 3
+BBC Radio 4
+Capital FM
+
+Podcasts Supported are:
+Good Job Brain
+No Such Thing As a Fish
+Freakonomics
 
