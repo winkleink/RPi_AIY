@@ -22,6 +22,7 @@ import RPi.GPIO as gpio
 import time
 
 import urllib.request
+import feedparser
 
 import actionbase
 
@@ -233,157 +234,165 @@ class RepeatAfterMe(object):
 
 class Radio(object):
 
+    STATIONS = {
+        "absolute radio":"http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=arbb"
+        "absolute 80s":"http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a8bb"
+        "absolute 90s":"http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a9bb"
+        "absolute noughties":"http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a0bb"
+        "eagle radio":"http://str1.sad.ukrd.com/eagle.m3u"
+        "bbc radio 1":"http://www.listenlive.eu/bbcradio1.m3u"
+        "bbc radio 2":"http://www.listenlive.eu/bbcradio2.m3u"
+        "bbc radio 3":"http://www.listenlive.eu/bbcradio3.m3u"
+        "bbc radio 4":"http://www.listenlive.eu/bbcradio4.m3u"		
+        "capital fm":"http://media-ice.musicradio.com/CapitalMP3.m3u"
+    }
+
     def __init__(self, say, keyword):
-
         self.say = say
-
         self.keyword = keyword
-
-
 
     def run(self, voice_command):
 
-        # Get string
+        station = ((voice_command.lower()).replace(self.keyword, '', 1)).strip()
 
-        print ("Keyword "+voice_command)
+        if station == 'list':
+            logging.info("Enumerating radio stations")
+            self.say("Available stations are")
+            for key in Radio.STATIONS.keys():
+                self.say(key)
+            return
 
-        #set command to something specific so can check if it's changed
-        command = "1"
-        
-        # convert voice_command to lowercase so easier to parse
-        voice_command =voice_command.lower()
-        
-        if ("absolute radio" in voice_command) :
+        elif station not in Radio.STATIONS:
+            logging.info("Station not found: " + voice_command)
+            self.say("radio station " + voice_command + " not found")
+            return
 
-            command = "http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=arbb"
+        logging.info("streaming " + station)
+        self.say("tuning the radio to " + station)
 
-        elif ("absolute 80s" in voice_command) :
+        p = subprocess.Popen(['/usr/bin/cvlc','--no-video','--quiet','--play-and-exit',Radio.STATIONS[station]],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 
-            command = "http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a8bb"
+        gpio.setmode(gpio.BCM)
+        gpio.setup(23, gpio.IN)
 
-        elif ("absolute 90s" in voice_command) :
+        while p.poll() == None:
+            if gpio.input(23) == 0:
+                logging.info("stopping radio by GPIO")
+                p.kill()
+                break
 
-            command = "http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a9bb"
+            time.sleep(0.1)
 
-        elif ("absolute noughties" in voice_command) :
+        logging.info("radio stopped playing")
 
-            command = "http://network.absoluteradio.co.uk/core/audio/mp3/live.pls?service=a0bb"
-
-        elif ("eagle radio" in voice_command) :
-
-            command = "http://str1.sad.ukrd.com/eagle.m3u"
-
-        elif ("bbc radio 1" in voice_command) :
-
-            command = "http://www.listenlive.eu/bbcradio1.m3u"
-		
-        elif ("bbc radio 2" in voice_command) :
-
-            command = "http://www.listenlive.eu/bbcradio2.m3u"
-		
-        elif ("bbc radio 3" in voice_command) :
-
-            command = "http://www.listenlive.eu/bbcradio3.m3u"
-		
-        elif ("bbc radio 4" in voice_command) :
-
-            command = "http://www.listenlive.eu/bbcradio4.m3u"
-		
-        elif ("capital fm" in voice_command) :
-
-            command = "http://media-ice.musicradio.com/CapitalMP3.m3u"
-		
-        if command != "1":
-        
-            p = subprocess.Popen(["/usr/bin/cvlc",command],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
-
-            while gpio.input(23):
-                time.sleep(1)
-
-            pkill = subprocess.Popen(["/usr/bin/pkill","vlc"],stdin=subprocess.PIPE)
-            p.kill()
-
-            
-# Podcast playback
 class Podcast(object):
 
+    PODCASTS = {
+        'no such thing as a fish':'https://audioboom.com/channels/2399216.rss'
+        'good job brain':'https://audioboom.com/channels/2795364.rss',
+        'freakonomics':'http://feeds.feedburner.com/freakonomicsradio?format=xml',
+        'ted talks':'https://www.ted.com/feeds/talks.rss'
+    }
+
     def __init__(self, say, keyword):
-
         self.say = say
-
         self.keyword = keyword
-
-
+        self.podcast = None
+        self.offset = None
 
     def run(self, voice_command):
 
-        # Get string
+        self.offset = 0
+        self.podcast = ((voice_command.lower()).replace(self.keyword, '', 1)).strip()
 
-        print ("Keyword "+voice_command)
-        
-       
-        #set command to something specific so can check if it's changed
-        command = "1"
-        
-        # convert voice_command to lowercase so easier to parse
-        voice_command =voice_command.lower()        
+        if self.podcast == 'list':
+            logging.info("Enumerating Podcasts")
+            self.say("Available podcasts are")
+            for key in Podcast.PODCASTS.keys():
+                self.say(key)
+            return
 
-        # resetting variables as these are checked later to determine if a podcast is to be played
-        startmp3 = 0
-        endmp3 = 0
-        
-        if ("no such thing as a fish" in voice_command) :
+        elif self.podcast not in Podcast.PODCASTS:
+            logging.info("Podcast not found: " + self.podcast)
+            self.say("Podcast " + self.podcast + " not found")
+            return
 
-            # get url content for No Such Thing as a Fish podcast
-            url = 'https://audioboom.com/channels/2399216.rss'
-            response = urllib.request.urlopen(url)
-            data = response.read()      # a `bytes` object
-            text = data.decode('utf-8')
-        
-            startmp3 = text.find('<enclosure url="')+16
-            endmp3 = text.find('.mp3',startmp3)+4
-        
-            if startmp3 > 0:
-                command = text[startmp3:endmp3]
- 
-        elif ("good job brain" in voice_command) :
+        elif self.podcast.startswith('previous '):
+            self.offset = 1
+            self.podcast = self.podcast[9:]
 
-            # get url content for Good Job Brain podcast
-            url = 'https://audioboom.com/channels/2795364.rss'
-            response = urllib.request.urlopen(url)
-            data = response.read()      # a `bytes` object
-            text = data.decode('utf-8')
-        
-            startmp3 = text.find('<enclosure url="')+16
-            endmp3 = text.find('.mp3',startmp3)+4
-        
-            if startmp3 > 0:
-                command = text[startmp3:endmp3]
-                
-        elif ("freakonomics" in voice_command) :
+        podcastInfo = self.getPodcastItem(Podcast.PODCASTS[self.podcast], self.offset)
+        if podcastInfo == None:
+            logging.info("Podcast failed to load")
+            return
+        logging.info("Podcast Title: " + podcastInfo['title'])
+        logging.info("Podcast URL: " + podcastInfo['url'])
+        logging.info("Podcast Date: " + podcastInfo['published'])
 
-            # get url content for Freakonomics podcast
-            url = 'http://feeds.feedburner.com/freakonomicsradio?format=xml'
-            response = urllib.request.urlopen(url)
-            data = response.read()      # a `bytes` object
-            text = data.decode('utf-8')
-        
-            startmp3 = text.find('/redirect.mp3/')+14
-            endmp3 = text.find('.mp3',startmp3+16)+4
-        
-            if startmp3 > 0:
-                command = "http://"+text[startmp3:endmp3]
+        self.say("Playing episode of " + self.podcast + " titled " + podcastInfo['title'])
 
-        if command != "1":
-        
-            p = subprocess.Popen(["/usr/bin/cvlc",command],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+        p = subprocess.Popen(['/usr/bin/cvlc','--no-video','--quiet','--play-and-exit',podcastInfo['url']],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 
-            while gpio.input(23):
-                time.sleep(1)
+        gpio.setmode(gpio.BCM)
+        gpio.setup(23, gpio.IN)
 
-            pkill = subprocess.Popen(["/usr/bin/pkill","vlc"],stdin=subprocess.PIPE)
-            p.kill()
+        while p.poll() == None:
+            if gpio.input(23) == 0:
+                logging.info("stopping podcast by GPIO")
+                p.kill()
+                break
 
+            time.sleep(0.1)
+
+        logging.info("podcast stopped playing")
+
+    def getPodcastItem(self, src, offset):
+
+        result = {
+            "url":None,
+            "title":None,
+            "published_parsed":None,
+            "published":None
+        }
+
+        logging.info("loading " + src + " podcast feed")
+        rss = feedparser.parse(src)
+
+        # get the total number of entries returned
+        resCount = len(rss.entries)
+        logging.info("feed contains " + str(resCount) + " items")
+
+        # exit out if empty
+        if resCount < offset:
+            logging.info(self.podcast + " podcast feed is empty")
+            self.say("There are no episodes available of " + self.podcast)
+            return None
+
+        rssItem = rss.entries[offset]
+
+        # Extract infromation about requested item
+
+        if 'title' in rssItem:
+            result['title'] = rssItem.title
+
+        if 'published_parsed' in rssItem:
+            result['date_parsed'] = rssItem.published_parsed
+
+        if 'published' in rssItem:
+            result['published'] = rssItem.published
+
+        if 'media_content' in rssItem:
+            result['url'] = rssItem.media_content[0]['url']
+
+        elif 'enclosures' in rssItem:
+            result['url'] = rssItem.enclosures[0]['href']
+
+        else:
+            logging.info(self.podcast + " feed format is unknown")
+            self.say("The feed for " + self.podcast + " is unknown format")
+            return None
+
+        return result
 
 class play(object):
 
@@ -419,6 +428,7 @@ def make_actor(say):
 
     actor.add_keyword(_('volume up'), VolumeControl(say, 10))
     actor.add_keyword(_('volume down'), VolumeControl(say, -10))
+    actor.add_keyword(_('volume max'), VolumeControl(say, -10))
     actor.add_keyword(_('max volume'), VolumeControl(say, 100))
 
     actor.add_keyword(_('repeat after me'),
